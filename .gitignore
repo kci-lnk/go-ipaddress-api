@@ -25,11 +25,9 @@ bin/
 Thumbs.db
 
 # Project specific
-ipdata/
 tmp/
 .env
 .env.local
-*.xdb
 
 # Air (hot reload)
 .air.toml
