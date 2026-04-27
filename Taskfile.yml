@@ -1,0 +1,101 @@
+version: 3
+
+tasks:
+  version:
+    cmds:
+      - grep -E '^\s*Version\s*=' cmd/server/main.go | head -1
+
+  # Build
+  build:
+    desc: Build binary for current platform
+    dir: .
+    cmds:
+      - CGO_ENABLED=0 go build -ldflags="-s -w" -o bin/ipaddress-api ./cmd/server
+
+  build-multi:
+    desc: Build binaries for all architectures
+    dir: .
+    cmds:
+      - |
+        mkdir -p bin
+        GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o bin/ipaddress-api-linux-amd64 ./cmd/server
+        GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="-s -w" -o bin/ipaddress-api-linux-arm64 ./cmd/server
+        GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o bin/ipaddress-api-darwin-amd64 ./cmd/server
+        GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="-s -w" -o bin/ipaddress-api-darwin-arm64 ./cmd/server
+        GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o bin/ipaddress-api-windows-amd64.exe ./cmd/server
+
+  # Docker
+  docker:build:
+    desc: Build Docker image
+    dir: .
+    cmds:
+      - docker build --pull -t ipaddress-api:latest -t ipaddress-api:${VERSION:-1.0.0} .
+
+  docker:push:
+    desc: Push Docker image to registry
+    dir: .
+    cmds:
+      - docker push ipaddress-api:latest
+      - docker push ipaddress-api:${VERSION:-1.0.0}
+
+  docker:login:
+    desc: Login to Docker Hub
+    dir: .
+    cmds:
+      - docker login -u ${DOCKER_USERNAME}
+
+  # Publish
+  publish:local:
+    desc: Publish binaries to remote server via SSH
+    dir: .
+    cmds:
+      - rsync -avz --progress bin/ root@${SSH_HOST}:/opt/ipaddress-api/bin/
+
+  publish:docker:
+    desc: Publish Docker image to registry
+    dir: .
+    cmds:
+      - |
+        docker build --pull \
+          -t ${DOCKER_USERNAME}/ipaddress-api:latest \
+          -t ${DOCKER_USERNAME}/ipaddress-api:${VERSION:-1.0.0} .
+        docker push ${DOCKER_USERNAME}/ipaddress-api:latest
+        docker push ${DOCKER_USERNAME}/ipaddress-api:${VERSION:-1.0.0}
+
+  # Run
+  run:
+    desc: Run the server locally
+    dir: .
+    cmds:
+      - go run ./cmd/server -config configs/config.yaml
+
+  docker:compose:up:
+    desc: Start services with docker compose
+    dir: .
+    cmds:
+      - docker compose up -d
+
+  docker:compose:down:
+    desc: Stop services with docker compose
+    dir: .
+    cmds:
+      - docker compose down
+
+  # Development
+  lint:
+    desc: Run linter
+    dir: .
+    cmds:
+      - golangci-lint run ./...
+
+  test:
+    desc: Run tests
+    dir: .
+    cmds:
+      - go test -v -race ./...
+
+  tidy:
+    desc: Tidy go modules
+    dir: .
+    cmds:
+      - go mod tidy

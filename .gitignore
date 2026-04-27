@@ -1,0 +1,40 @@
+# Binaries
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary
+*.test
+
+# Output
+*.out
+*.log
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+ipdata/
+tmp/
+.env
+.env.local
+*.xdb
+
+# Air (hot reload)
+.air.toml
+
+# Build
+dist/
+vendor/
+.claude/

@@ -1,0 +1,38 @@
+server:
+  host: "0.0.0.0"
+  port: 30661
+  mode: "release"
+  read_timeout: 10
+  write_timeout: 10
+  idle_timeout: 60
+  max_header_bytes: 4096
+
+redis:
+  host: "localhost"
+  port: 6379
+  password: ""
+  db: 0
+  pool_size: 10
+  dial_timeout: 5
+  read_timeout: 3
+  write_timeout: 3
+
+ratelimit:
+  enabled: true
+  requests_per_second: 100
+  burst: 200
+
+cache:
+  ttl: 3600
+
+trust_proxy:
+  enabled: true
+  real_ip_header: "X-Real-IP"
+  real_ip_headers:
+    - "X-Real-IP"
+    - "X-Forwarded-For"
+    - "CF-Connecting-IP"
+
+log:
+  level: "info"
+  format: "json"
