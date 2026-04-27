@@ -36,3 +36,7 @@ tmp/
 dist/
 vendor/
 .claude/
+
+# Docker buildx cache
+.buildx-cache/
+.buildx-cache-new/

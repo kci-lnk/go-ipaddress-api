@@ -3,7 +3,7 @@ version: 3
 tasks:
   version:
     cmds:
-      - grep -E '^\s*Version\s*=' cmd/server/main.go | head -1
+      - grep 'Version' cmd/server/main.go | head -1 | sed 's/.*"\(.*\)".*/\1/'
 
   # Build
   build:
@@ -29,7 +29,7 @@ tasks:
     desc: Build Docker image
     dir: .
     cmds:
-      - docker build --pull -t ipaddress-api:latest -t ipaddress-api:${VERSION:-1.0.0} .
+      - docker build --pull -t ipaddress-api:latest -t ipaddress-api:${VERSION:-1.0.1} .
 
   docker:push:
     desc: Push Docker image to registry
@@ -52,22 +52,54 @@ tasks:
       - rsync -avz --progress bin/ root@${SSH_HOST}:/opt/ipaddress-api/bin/
 
   publish:docker:
-    desc: Publish Docker image to registry
+    desc: Publish Docker image to registry (multi-arch)
     dir: .
     cmds:
       - |
-        docker build --pull \
-          -t ${DOCKER_USERNAME}/ipaddress-api:latest \
-          -t ${DOCKER_USERNAME}/ipaddress-api:${VERSION:-1.0.0} .
-        docker push ${DOCKER_USERNAME}/ipaddress-api:latest
-        docker push ${DOCKER_USERNAME}/ipaddress-api:${VERSION:-1.0.0}
+        VERSION=$(grep 'Version' cmd/server/main.go | head -1 | sed 's/.*"\(.*\)".*/\1/')
+        BUILD_TIME=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+        GIT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+        echo "Publishing version: $VERSION"
+
+        # Setup buildx builder with docker-container driver for cache support
+        docker buildx create --name multiarch-builder --driver docker-container --use 2>/dev/null || docker buildx use multiarch-builder
+
+        # Rotate cache to prevent accumulation
+        rm -rf .buildx-cache-new
+        mv .buildx-cache .buildx-cache-old 2>/dev/null || true
+
+        # Use local cache for faster builds (env vars auto-populate bake variables)
+        docker buildx bake -f docker-bake.hcl \
+          --push \
+          ipaddress-api-local
+
+        # Clean up old cache
+        rm -rf .buildx-cache-old
+
+  publish:docker:gha:
+    desc: Publish Docker image using GitHub Actions cache (for CI)
+    dir: .
+    cmds:
+      - |
+        VERSION=$(grep 'Version' cmd/server/main.go | head -1 | sed 's/.*"\(.*\)".*/\1/')
+        BUILD_TIME=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+        GIT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+        echo "Publishing version: $VERSION"
+
+        # Setup buildx builder with docker-container driver for cache support
+        docker buildx create --name multiarch-builder --driver docker-container --use 2>/dev/null || docker buildx use multiarch-builder
+
+        # Use GHA cache for CI (env vars auto-populate bake variables)
+        docker buildx bake -f docker-bake.hcl \
+          --push \
+          ipaddress-api
 
   # Run
   run:
     desc: Run the server locally
     dir: .
     cmds:
-      - go run ./cmd/server -config configs/config.yaml
+      - go run ./cmd/server
 
   docker:compose:up:
     desc: Start services with docker compose

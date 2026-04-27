@@ -5,14 +5,15 @@ High-performance IP geolocation API service built with Go, supporting both IPv4 
 ## Features
 
 - **IPv4/IPv6 Support** - Full support for both address families
-- **ip2region Database** - High-performance local XDB database lookup
-- **Redis Caching** - 1-hour TTL cache to reduce database load
+- **ip2region Database** - High-performance local XDB database lookup (bundled in image)
+- **Redis Caching** - Configurable TTL cache to reduce database load
 - **Rate Limiting** - Token bucket algorithm via Redis Lua scripts
 - **Trust Proxy** - Extract real client IP from Cloudflare/X-Forwarded-For headers with strict IP validation
 - **Structured Logging** - JSON format logs via slog for production observability
 - **Request Size Limit** - Protects against large payload attacks
 - **Multi-arch Build** - Compile for Linux (amd64/arm64), macOS (amd64/arm64), Windows
 - **Docker Support** - Multi-stage build with docker-compose orchestration
+- **Env Var Config** - All configuration via environment variables with defaults
 
 ## Quick Start
 
@@ -21,8 +22,22 @@ High-performance IP geolocation API service built with Go, supporting both IPv4 
 - Go 1.23+
 - Redis 7+
 - [Task](https://taskfile.dev/) (optional, for task automation)
+- Docker & Docker Compose
 
-### Build
+### Run with Docker Compose
+
+```bash
+# Start services (Redis + API)
+docker compose up -d
+
+# View logs
+docker compose logs -f
+
+# Stop services
+docker compose down
+```
+
+### Build from Source
 
 ```bash
 # Build for current platform
@@ -35,10 +50,7 @@ task build-multi
 ### Run
 
 ```bash
-# With Docker Compose (includes Redis)
-task docker:compose:up
-
-# Or run standalone (requires Redis running)
+# Run standalone (requires Redis running)
 redis-server &
 task run
 ```
@@ -91,70 +103,34 @@ curl "http://localhost:30661/health"
 
 ## Configuration
 
-Configuration is managed via `configs/config.yaml` and environment variables.
-
-### config.yaml
-
-```yaml
-server:
-  host: "0.0.0.0"
-  port: 30661
-  mode: "release"
-  read_timeout: 10      # HTTP read timeout (seconds)
-  write_timeout: 10    # HTTP write timeout (seconds)
-  idle_timeout: 60     # HTTP idle timeout (seconds)
-  max_header_bytes: 4096
-
-redis:
-  host: "localhost"
-  port: 6379
-  password: ""
-  db: 0
-  pool_size: 10
-  dial_timeout: 5      # Redis dial timeout (seconds)
-  read_timeout: 3      # Redis read timeout (seconds)
-  write_timeout: 3     # Redis write timeout (seconds)
-
-ratelimit:
-  enabled: true
-  requests_per_second: 100
-  burst: 200
-
-cache:
-  ttl: 3600
-
-trust_proxy:
-  enabled: true
-  real_ip_header: "X-Real-IP"
-  real_ip_headers:
-    - "X-Real-IP"
-    - "X-Forwarded-For"
-    - "CF-Connecting-IP"
-
-log:
-  level: "info"
-  format: "json"
-```
+All configuration is via environment variables. No config file required.
 
 ### Environment Variables
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `REDIS__HOST` | Redis host | `localhost` |
-| `REDIS__PORT` | Redis port | `6379` |
-| `REDIS__PASSWORD` | Redis password | (empty) |
-| `REDIS__DB` | Redis database | `0` |
-| `REDIS__DIAL_TIMEOUT` | Redis dial timeout (seconds) | `5` |
-| `REDIS__READ_TIMEOUT` | Redis read timeout (seconds) | `3` |
-| `REDIS__WRITE_TIMEOUT` | Redis write timeout (seconds) | `3` |
-| `CACHE__TTL` | Cache TTL in seconds | `3600` |
-| `RATELIMIT__ENABLED` | Enable rate limiting | `true` |
-| `RATELIMIT__REQUESTS_PER_SECOND` | Requests per second | `100` |
-| `RATELIMIT__BURST` | Burst size | `200` |
-| `TRUST_PROXY__ENABLED` | Enable trust proxy | `true` |
-| `TRUST_PROXY__REAL_IP_HEADER` | Primary real IP header | `X-Real-IP` |
-| `SERVER_PORT` | API server port (docker compose) | `30661` |
-| `REDIS_PORT` | Redis port (docker compose) | `6379` |
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SERVER__HOST` | `0.0.0.0` | Server bind host |
+| `SERVER__PORT` | `30661` | Server port |
+| `SERVER__READ_TIMEOUT` | `10s` | HTTP read timeout |
+| `SERVER__WRITE_TIMEOUT` | `10s` | HTTP write timeout |
+| `SERVER__IDLE_TIMEOUT` | `60s` | HTTP idle timeout |
+| `SERVER__MAX_HEADER_BYTES` | `4096` | Max header bytes |
+| `REDIS__HOST` | `localhost` | Redis host |
+| `REDIS__PORT` | `6379` | Redis port |
+| `REDIS__PASSWORD` | (empty) | Redis password |
+| `REDIS__DB` | `0` | Redis database |
+| `REDIS__POOL_SIZE` | `10` | Redis connection pool size |
+| `REDIS__DIAL_TIMEOUT` | `5s` | Redis dial timeout |
+| `REDIS__READ_TIMEOUT` | `3s` | Redis read timeout |
+| `REDIS__WRITE_TIMEOUT` | `3s` | Redis write timeout |
+| `CACHE__TTL` | `3600` | Cache TTL in seconds |
+| `RATELIMIT__ENABLED` | `true` | Enable rate limiting |
+| `RATELIMIT__REQUESTS_PER_SECOND` | `100` | Requests per second |
+| `RATELIMIT__BURST` | `200` | Rate limit burst size |
+| `TRUST_PROXY__ENABLED` | `true` | Enable trust proxy |
+| `TRUST_PROXY__REAL_IP_HEADER` | `X-Real-IP` | Real IP header |
+| `LOG__LEVEL` | `info` | Log level |
+| `LOG__FORMAT` | `json` | Log format (json/text) |
 
 ### Redis Key Prefix
 
@@ -170,7 +146,7 @@ All Redis keys use a fixed global prefix: `ipaddress:`
 │   └── main.go         # Run function, version constants
 ├── internal/
 │   ├── cache/          # Redis cache layer
-│   ├── config/         # Configuration loading (viper)
+│   ├── config/         # Configuration loading (env vars)
 │   ├── handler/        # HTTP handlers
 │   ├── ipdata/         # ip2region XDB database wrapper
 │   ├── middleware/
@@ -179,9 +155,8 @@ All Redis keys use a fixed global prefix: `ipaddress:`
 │   │   └── body_size.go    # Request body size limit
 │   └── ratelimit/      # Token bucket implementation
 ├── pkg/response/       # Unified response format
-├── configs/            # Configuration files
 ├── scripts/           # Build and deployment scripts
-├── ipdata/            # ip2region XDB database files
+├── ipdata/            # ip2region XDB database files (bundled in image)
 │   ├── base_full_v4.xdb
 │   └── base_full_v6.xdb
 ├── Taskfile.yml       # Task automation
@@ -205,7 +180,7 @@ task --list
 | `docker:compose:up` | Start services with docker compose |
 | `docker:compose:down` | Stop services |
 | `publish:local` | Publish binaries via SSH |
-| `publish:docker` | Publish to Docker Hub |
+| `publish:docker` | Publish multi-arch Docker images to Hub |
 | `tidy` | Tidy go modules |
 
 ## Deployment
@@ -233,10 +208,15 @@ SSH_HOST=192.168.31.135 task publish:local
 ### Docker Hub
 
 ```bash
-# Login and publish
-export DOCKER_USERNAME=yourusername
-task docker:login
+# Publish multi-arch images (amd64 + arm64) to Docker Hub
+# Version is automatically read from main.go
 task publish:docker
+
+# This will:
+# 1. Read version from main.go (currently 1.0.1)
+# 2. Build linux/amd64 and linux/arm64 images
+# 3. Tag as kcilnk/go-ipaddress-api:<version> and kcilnk/go-ipaddress-api:latest
+# 4. Create and push multi-arch manifests for both tags
 ```
 
 ## Docker
@@ -249,7 +229,7 @@ docker build -t ipaddress-api:latest .
 
 # With build args
 docker build \
-  --build-arg VERSION=1.0.0 \
+  --build-arg VERSION=1.0.1 \
   --build-arg BUILD_TIME=$(date -u '+%Y-%m-%dT%H:%M:%SZ') \
   -t ipaddress-api:latest .
 ```
@@ -259,35 +239,25 @@ docker build \
 ```bash
 docker run -d \
   -p 30661:30661 \
-  -v $(pwd)/ipdata:/app/ipdata \
-  -v $(pwd)/configs:/app/configs \
-  -e REDIS__HOST=redis \
+  -e REDIS__HOST=your-redis-host \
   -e REDIS__PASSWORD=yourpassword \
   --link redis \
-  ipaddress-api:latest
+  kcilnk/go-ipaddress-api:latest
 ```
 
 ### Multi-platform Build
 
 ```bash
+# Use task (recommended)
+task publish:docker
+
+# Or manually with buildx
 docker buildx create --use
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
-  -t yourusername/ipaddress-api:latest \
+  -t kcilnk/go-ipaddress-api:latest \
   --push .
 ```
-
-## Database Files
-
-Place XDB database files in `ipdata/` directory:
-
-```
-ipdata/
-├── base_full_v4.xdb   # IPv4 database
-└── base_full_v6.xdb   # IPv6 database
-```
-
-Obtain from [ip2region releases](https://github.com/lionsoul2014/ip2region/releases) or build your own.
 
 ## Error Codes
 

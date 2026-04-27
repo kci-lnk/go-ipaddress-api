@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"log"
 	"log/slog"
@@ -23,7 +22,7 @@ import (
 	"github.com/kci-lnk/ipaddress-api/internal/ratelimit"
 )
 
-const Version = "1.0.0"
+const Version = "1.0.1"
 
 var BuildTime string
 var GitCommit string
@@ -36,16 +35,13 @@ func main() {
 		os.Exit(0)
 	}
 
-	configPath := flag.String("config", "configs/config.yaml", "path to config file")
-	flag.Parse()
-
-	if err := Run(*configPath); err != nil {
+	if err := Run(); err != nil {
 		log.Fatal(err)
 	}
 }
 
-func Run(configPath string) error {
-	cfg, err := config.Load(configPath)
+func Run() error {
+	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
