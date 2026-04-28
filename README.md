@@ -26,6 +26,8 @@ High-performance IP geolocation API service built with Go, supporting both IPv4 
 
 ### Run with Docker Compose
 
+The bundled `docker-compose.yml` sets `restart: unless-stopped` for both API and Redis containers so services resume after a host reboot.
+
 ```bash
 # Start services (Redis + API)
 docker compose up -d
@@ -187,6 +189,8 @@ task --list
 
 ### Docker Compose
 
+The bundled `docker-compose.yml` sets `restart: unless-stopped` for both API and Redis containers so services resume after a host reboot.
+
 ```bash
 # Start services (Redis + API)
 docker compose up -d
@@ -238,6 +242,7 @@ docker build \
 
 ```bash
 docker run -d \
+  --restart unless-stopped \
   -p 30661:30661 \
   -e REDIS__HOST=your-redis-host \
   -e REDIS__PASSWORD=yourpassword \

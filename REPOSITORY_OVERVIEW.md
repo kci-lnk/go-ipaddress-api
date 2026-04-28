@@ -13,6 +13,7 @@ docker pull kcilnk/go-ipaddress-api
 # 启动服务（需要先准备好 Redis）
 docker run -d \
   --name ipaddress-api \
+  --restart unless-stopped \
   -p 30661:30661 \
   -e REDIS__HOST=your-redis-host \
   -e REDIS__PASSWORD=yourpassword \
@@ -32,6 +33,7 @@ services:
   ipaddress-api:
     image: kcilnk/go-ipaddress-api
     container_name: ipaddress-api
+    restart: unless-stopped
     ports:
       - "30661:30661"
     environment:
@@ -65,6 +67,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: ipaddress-redis
+    restart: unless-stopped
     command: redis-server --appendonly yes
     environment:
       - REDIS__PASSWORD=
