@@ -14,6 +14,14 @@ variable "VERSION" {
   default = "unknown"
 }
 
+variable "IMAGE_TAG" {
+  default = VERSION
+}
+
+variable "PUBLISH_LATEST" {
+  default = true
+}
+
 variable "BUILD_TIME" {
   default = "unknown"
 }
@@ -38,10 +46,10 @@ target "ipaddress-api" {
     HTTP_PROXY = HTTP_PROXY
     HTTPS_PROXY = HTTPS_PROXY
   }
-  tags = [
-    "${REGISTRY}/go-ipaddress-api:${VERSION}",
-    "${REGISTRY}/go-ipaddress-api:latest"
-  ]
+  tags = concat(
+    ["${REGISTRY}/go-ipaddress-api:${IMAGE_TAG}"],
+    PUBLISH_LATEST ? ["${REGISTRY}/go-ipaddress-api:latest"] : [],
+  )
   cache-from = ["type=gha,scope=go-mod"]
   cache-to = ["type=gha,mode=max,scope=go-mod"]
 }

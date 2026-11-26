@@ -1,0 +1,9 @@
+.git
+.github
+.buildx-cache*
+bin
+dist
+dump.rdb
+.env
+.env.*
+.DS_Store

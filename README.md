@@ -19,7 +19,7 @@ High-performance IP geolocation API service built with Go, supporting both IPv4 
 
 ### Prerequisites
 
-- Go 1.23+
+- Go 1.24+
 - Redis 7+
 - [Task](https://taskfile.dev/) (optional, for task automation)
 - Docker & Docker Compose
@@ -209,19 +209,22 @@ docker compose down
 SSH_HOST=192.168.31.135 task publish:local
 ```
 
-### Docker Hub
+### GitHub Releases and Docker Hub
+
+Commit both XDB files through Git LFS before tagging a release. Set the
+`DOCKERHUB_TOKEN` repository secret to a Docker Hub access token with push
+permission for `kcilnk/go-ipaddress-api`. Set the `DOCKERHUB_USERNAME`
+repository variable if the token belongs to a different Docker Hub user.
 
 ```bash
-# Publish multi-arch images (amd64 + arm64) to Docker Hub
-# Version is automatically read from main.go
-task publish:docker
-
-# This will:
-# 1. Read version from main.go (currently 1.0.1)
-# 2. Build linux/amd64 and linux/arm64 images
-# 3. Tag as kcilnk/go-ipaddress-api:<version> and kcilnk/go-ipaddress-api:latest
-# 4. Create and push multi-arch manifests for both tags
+git tag -a v1.0.2 -m "Release v1.0.2"
+git push origin v1.0.2
 ```
+
+The release workflow runs the Go tests, publishes Linux, macOS and Windows
+binaries with `SHA256SUMS` to GitHub Releases, and pushes the Linux amd64/arm64
+image to Docker Hub as `kcilnk/go-ipaddress-api:v1.0.2`. The highest version
+tag also updates `latest`.
 
 ## Docker
 
@@ -233,7 +236,7 @@ docker build -t ipaddress-api:latest .
 
 # With build args
 docker build \
-  --build-arg VERSION=1.0.1 \
+  --build-arg VERSION=1.0.2 \
   --build-arg BUILD_TIME=$(date -u '+%Y-%m-%dT%H:%M:%SZ') \
   -t ipaddress-api:latest .
 ```

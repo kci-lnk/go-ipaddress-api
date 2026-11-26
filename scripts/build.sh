@@ -1,23 +1,24 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-# Load version from cmd/server/version.go
-VERSION=$(grep -E 'Version\s*=' cmd/server/version.go | head -1 | sed 's/.*=\s*"\([^"]*\)".*/\1/')
-BUILD_TIME=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
-GIT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+VERSION=${VERSION:-$(sed -nE 's/^var Version = "([^"]+)"/\1/p' cmd/server/main.go)}
+BUILD_TIME=${BUILD_TIME:-$(date -u '+%Y-%m-%dT%H:%M:%SZ')}
+GIT_COMMIT=${GIT_COMMIT:-$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")}
+OUTPUT_DIR=${OUTPUT_DIR:-bin}
 
-export VERSION
-export BUILD_TIME
-export GIT_COMMIT
+if [[ -z "$VERSION" ]]; then
+    echo "Unable to determine the build version." >&2
+    exit 1
+fi
 
 echo "Building version: $VERSION"
 echo "Build time: $BUILD_TIME"
 echo "Git commit: $GIT_COMMIT"
 
 # Create output directory
-mkdir -p bin
+mkdir -p "$OUTPUT_DIR"
 
 # Build for multiple architectures
 build() {
@@ -29,7 +30,7 @@ build() {
 
     GOOS=$os GOARCH=$arch CGO_ENABLED=0 go build \
         -ldflags="-s -w -X main.Version=${VERSION} -X main.BuildTime=${BUILD_TIME} -X main.GitCommit=${GIT_COMMIT}" \
-        -o "bin/ipaddress-api-${os}-${arch}${suffix}" \
+        -o "$OUTPUT_DIR/ipaddress-api-${os}-${arch}${suffix}" \
         ./cmd/server
 }
 
@@ -45,4 +46,4 @@ build darwin arm64 ""
 build windows amd64 ".exe"
 
 echo "Build complete. Binaries:"
-ls -la bin/
+ls -la "$OUTPUT_DIR"

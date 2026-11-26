@@ -22,7 +22,7 @@ import (
 	"github.com/kci-lnk/ipaddress-api/internal/ratelimit"
 )
 
-const Version = "1.0.1"
+var Version = "1.0.2"
 
 var BuildTime string
 var GitCommit string

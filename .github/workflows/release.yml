@@ -1,0 +1,145 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release-binaries:
+    name: Build and publish GitHub Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.metadata.outputs.version }}
+      build_time: ${{ steps.metadata.outputs.build_time }}
+      commit: ${{ steps.metadata.outputs.commit }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7
+        with:
+          go-version: '1.26.x'
+
+      - name: Resolve version and build time
+        id: metadata
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Expected a release tag in the form vMAJOR.MINOR.PATCH."
+            exit 1
+          fi
+          printf 'version=%s\nbuild_time=%s\ncommit=%s\n' "${TAG#v}" \
+            "$(date -u -d "@$(git show -s --format=%ct HEAD)" '+%Y-%m-%dT%H:%M:%SZ')" \
+            "$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Test
+        run: go test ./...
+
+      - name: Build release binaries
+        env:
+          VERSION: ${{ steps.metadata.outputs.version }}
+          BUILD_TIME: ${{ steps.metadata.outputs.build_time }}
+          GIT_COMMIT: ${{ steps.metadata.outputs.commit }}
+          OUTPUT_DIR: dist/release
+        run: |
+          bash scripts/build.sh
+          "$OUTPUT_DIR/ipaddress-api-linux-amd64" version | grep -Fx "Version: $VERSION"
+          cd "$OUTPUT_DIR"
+          # Preserve the unqualified macOS arm64 asset from v1.0.1.
+          cp ipaddress-api-darwin-arm64 ipaddress-api
+          sha256sum ipaddress-api ipaddress-api-* > SHA256SUMS
+
+      - name: Publish release and checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if draft=$(gh release view "$TAG" --json isDraft --jq .isDraft); then
+            if [[ "$draft" == false ]]; then
+              echo "$TAG is already published."
+              exit 0
+            fi
+          else
+            gh release create "$TAG" --draft --verify-tag --generate-notes --title "$TAG"
+          fi
+          gh release upload "$TAG" dist/release/* --clobber
+          gh release edit "$TAG" --draft=false
+
+  publish-docker:
+    name: Publish Docker Hub images
+    needs: release-binaries
+    runs-on: ubuntu-latest
+    concurrency:
+      group: docker-hub-publish
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          lfs: true
+          persist-credentials: false
+
+      - name: Verify bundled XDB files
+        run: |
+          for database in ipdata/base_full_v4.xdb ipdata/base_full_v6.xdb; do
+            oid=$(git show "HEAD:$database" | sed -n 's/^oid sha256://p')
+            if [[ ! "$oid" =~ ^[[:xdigit:]]{64}$ ]]; then
+              echo "::error file=$database::Missing Git LFS object ID."
+              exit 1
+            fi
+            printf '%s  %s\n' "$oid" "$database" | sha256sum --check
+          done
+
+      - name: Decide whether to update latest
+        id: tags
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          latest_tag=$(git ls-remote --tags --refs origin 'v*' |
+            sed -nE 's@^[[:xdigit:]]+[[:space:]]+refs/tags/(v[0-9]+\.[0-9]+\.[0-9]+)$@\1@p' |
+            sort -V | tail -n 1)
+          if [[ "$TAG" == "$latest_tag" ]]; then
+            echo "publish_latest=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish_latest=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME || 'kcilnk' }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push images
+        uses: docker/bake-action@59cb1203cd42bcefd40a1b6d73b589e48c86040e # v7
+        env:
+          GOPROXY: https://proxy.golang.org,direct
+          VERSION: ${{ needs.release-binaries.outputs.version }}
+          BUILD_TIME: ${{ needs.release-binaries.outputs.build_time }}
+          GIT_COMMIT: ${{ needs.release-binaries.outputs.commit }}
+          IMAGE_TAG: ${{ github.ref_name }}
+          PUBLISH_LATEST: ${{ steps.tags.outputs.publish_latest }}
+        with:
+          source: .
+          files: docker-bake.hcl
+          targets: ipaddress-api
+          push: true
